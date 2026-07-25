@@ -2,18 +2,56 @@ import { Request, Response } from 'express';
 import { pool } from '../config/db';
 
 export const createChallan = async (req: Request, res: Response) => {
-  const client = await pool.connect();
   try {
     const { challan_number, customer_id, products, total_quantity, status, created_by } = req.body;
 
     if (!challan_number || !customer_id || !products || !Array.isArray(products) || products.length === 0) {
-      client.release();
       return res.status(400).json({ error: 'Challan number, customer, and at least one product are required' });
     }
 
+    // Draft creation does NOT touch stock — stock is only deducted on Confirm
+    const result = await pool.query(
+      `INSERT INTO challans (challan_number, customer_id, products, total_quantity, status, created_by)
+       VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
+      [challan_number, customer_id, JSON.stringify(products), total_quantity, status || 'Draft', created_by || null]
+    );
+
+    res.status(201).json({ message: 'Challan saved as Draft. Stock has not been deducted yet — confirm the challan to update stock.', challan: result.rows[0] });
+  } catch (err: any) {
+    if (err.code === '23505') {
+      return res.status(400).json({ error: 'Challan number already exists' });
+    }
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+};
+
+export const confirmChallan = async (req: Request, res: Response) => {
+  const client = await pool.connect();
+  try {
+    const { id } = req.params;
+    const user = req.body.confirmed_by || null;
+
     await client.query('BEGIN');
 
-    // Step 1: Check stock availability for every product BEFORE deducting anything
+    const challanResult = await client.query('SELECT * FROM challans WHERE id = $1 FOR UPDATE', [id]);
+    if (challanResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      client.release();
+      return res.status(404).json({ error: 'Challan not found' });
+    }
+
+    const challan = challanResult.rows[0];
+
+    if (challan.status === 'Confirmed') {
+      await client.query('ROLLBACK');
+      client.release();
+      return res.status(400).json({ error: 'Challan is already confirmed' });
+    }
+
+    const products = challan.products; // JSON array of {product_id, quantity}
+
+    // Step 1: check stock for every line item
     for (const item of products) {
       const stockCheck = await client.query(
         'SELECT id, name, current_stock FROM products WHERE id = $1 FOR UPDATE',
@@ -27,7 +65,6 @@ export const createChallan = async (req: Request, res: Response) => {
       }
 
       const product = stockCheck.rows[0];
-
       if (product.current_stock < item.quantity) {
         await client.query('ROLLBACK');
         client.release();
@@ -37,32 +74,33 @@ export const createChallan = async (req: Request, res: Response) => {
       }
     }
 
-    // Step 2: All checks passed — deduct stock for each product
+    // Step 2: deduct stock + log each movement
     for (const item of products) {
       await client.query(
         'UPDATE products SET current_stock = current_stock - $1 WHERE id = $2',
         [item.quantity, item.product_id]
       );
+
+      await client.query(
+        `INSERT INTO stock_movements (product_id, quantity, movement_type, reason, created_by)
+         VALUES ($1, $2, 'OUT', $3, $4)`,
+        [item.product_id, item.quantity, `Challan ${challan.challan_number} confirmed`, user]
+      );
     }
 
-    // Step 3: Create the challan record
-    const result = await client.query(
-      `INSERT INTO challans (challan_number, customer_id, products, total_quantity, status, created_by)
-       VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
-      [challan_number, customer_id, JSON.stringify(products), total_quantity, status || 'Draft', created_by || null]
+    // Step 3: mark challan as Confirmed
+    const updated = await client.query(
+      `UPDATE challans SET status = 'Confirmed' WHERE id = $1 RETURNING *`,
+      [id]
     );
 
     await client.query('COMMIT');
     client.release();
 
-    res.status(201).json({ message: 'Challan created successfully, stock updated', challan: result.rows[0] });
+    res.json({ message: 'Challan confirmed, stock updated, movement logged', challan: updated.rows[0] });
   } catch (err: any) {
     await client.query('ROLLBACK');
     client.release();
-
-    if (err.code === '23505') {
-      return res.status(400).json({ error: 'Challan number already exists' });
-    }
     console.error(err);
     res.status(500).json({ error: 'Server error' });
   }
@@ -95,6 +133,20 @@ export const getChallanById = async (req: Request, res: Response) => {
     }
 
     res.json({ challan: result.rows[0] });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+};
+
+export const getProductMovements = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const result = await pool.query(
+      'SELECT * FROM stock_movements WHERE product_id = $1 ORDER BY created_at DESC',
+      [id]
+    );
+    res.json({ movements: result.rows });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Server error' });
