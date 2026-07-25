@@ -1,0 +1,273 @@
+{
+  "info": {
+    "name": "Fundsroom ERP API",
+    "description": "API collection for the Fundsroom Mini ERP + CRM take-home assignment. Covers Auth, Customers, Products, and Challans (with stock-deduction logic). Set the `base_url` variable to switch between local and deployed backend.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "https://fundsroom-erp-ttnj.onrender.com",
+      "description": "Change to http://localhost:5000 for local testing"
+    },
+    {
+      "key": "token",
+      "value": "",
+      "description": "Auto-filled after login (see Tests tab on Login request)"
+    }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Register - Admin",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Admin User\",\n  \"email\": \"admin@fundsroom.com\",\n  \"password\": \"admin123\",\n  \"role\": \"Admin\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/auth/register", "host": ["{{base_url}}"], "path": ["auth", "register"] }
+          }
+        },
+        {
+          "name": "Register - Sales",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Sales User\",\n  \"email\": \"sales@fundsroom.com\",\n  \"password\": \"sales123\",\n  \"role\": \"Sales\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/auth/register", "host": ["{{base_url}}"], "path": ["auth", "register"] }
+          }
+        },
+        {
+          "name": "Register - Warehouse",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Warehouse User\",\n  \"email\": \"warehouse@fundsroom.com\",\n  \"password\": \"warehouse123\",\n  \"role\": \"Warehouse\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/auth/register", "host": ["{{base_url}}"], "path": ["auth", "register"] }
+          }
+        },
+        {
+          "name": "Register - Accounts",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Accounts User\",\n  \"email\": \"accounts@fundsroom.com\",\n  \"password\": \"accounts123\",\n  \"role\": \"Accounts\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/auth/register", "host": ["{{base_url}}"], "path": ["auth", "register"] }
+          }
+        },
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const data = pm.response.json();",
+                  "    pm.collectionVariables.set('token', data.token);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@fundsroom.com\",\n  \"password\": \"admin123\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/auth/login", "host": ["{{base_url}}"], "path": ["auth", "login"] }
+          },
+          "description": "On success, the token is automatically saved to the {{token}} variable for use in subsequent requests."
+        }
+      ]
+    },
+    {
+      "name": "Customers",
+      "item": [
+        {
+          "name": "Create Customer",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"ABC Constructions\",\n  \"mobile\": \"9876543210\",\n  \"email\": \"abc@constructions.com\",\n  \"business_name\": \"ABC Constructions Pvt Ltd\",\n  \"customer_type\": \"Wholesale\",\n  \"address\": \"Hyderabad, Telangana\",\n  \"status\": \"Active\",\n  \"notes\": \"Regular bulk buyer\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/customers", "host": ["{{base_url}}"], "path": ["customers"] }
+          }
+        },
+        {
+          "name": "List Customers",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{base_url}}/customers?search=&page=1&limit=10",
+              "host": ["{{base_url}}"],
+              "path": ["customers"],
+              "query": [
+                { "key": "search", "value": "" },
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "10" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Customer by ID",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{base_url}}/customers/1", "host": ["{{base_url}}"], "path": ["customers", "1"] }
+          }
+        },
+        {
+          "name": "Update Customer",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"ABC Constructions\",\n  \"mobile\": \"9876543210\",\n  \"email\": \"abc@constructions.com\",\n  \"business_name\": \"ABC Constructions Pvt Ltd\",\n  \"customer_type\": \"Wholesale\",\n  \"address\": \"Hyderabad, Telangana\",\n  \"status\": \"Active\",\n  \"notes\": \"Updated notes\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/customers/1", "host": ["{{base_url}}"], "path": ["customers", "1"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Products",
+      "item": [
+        {
+          "name": "Create Product",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Steel Rod 10mm\",\n  \"sku\": \"SR-10MM\",\n  \"category\": \"Steel\",\n  \"unit_price\": 650,\n  \"current_stock\": 500,\n  \"min_stock_alert\": 50,\n  \"location\": \"Warehouse A\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/products", "host": ["{{base_url}}"], "path": ["products"] }
+          }
+        },
+        {
+          "name": "List Products",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{base_url}}/products?search=&page=1&limit=10",
+              "host": ["{{base_url}}"],
+              "path": ["products"],
+              "query": [
+                { "key": "search", "value": "" },
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "10" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Update Product",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Steel Rod 10mm\",\n  \"sku\": \"SR-10MM\",\n  \"category\": \"Steel\",\n  \"unit_price\": 700,\n  \"current_stock\": 490,\n  \"min_stock_alert\": 50,\n  \"location\": \"Warehouse A\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/products/1", "host": ["{{base_url}}"], "path": ["products", "1"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Challans",
+      "item": [
+        {
+          "name": "Create Challan - Success (sufficient stock)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"challan_number\": \"CH-DEMO-001\",\n  \"customer_id\": 1,\n  \"products\": [\n    { \"product_id\": 1, \"quantity\": 10 }\n  ],\n  \"total_quantity\": 10,\n  \"status\": \"Draft\",\n  \"created_by\": 1\n}"
+            },
+            "url": { "raw": "{{base_url}}/challans", "host": ["{{base_url}}"], "path": ["challans"] }
+          },
+          "description": "Deducts 10 units from product id 1's current_stock inside a DB transaction. Returns 201 on success."
+        },
+        {
+          "name": "Create Challan - Fail (insufficient stock)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"challan_number\": \"CH-DEMO-002\",\n  \"customer_id\": 1,\n  \"products\": [\n    { \"product_id\": 1, \"quantity\": 999999 }\n  ],\n  \"total_quantity\": 999999,\n  \"status\": \"Draft\",\n  \"created_by\": 1\n}"
+            },
+            "url": { "raw": "{{base_url}}/challans", "host": ["{{base_url}}"], "path": ["challans"] }
+          },
+          "description": "Demonstrates negative-stock prevention. Expected: 400 error, 'Insufficient stock...', and the transaction is rolled back (no partial update)."
+        },
+        {
+          "name": "List Challans",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{base_url}}/challans?page=1&limit=10",
+              "host": ["{{base_url}}"],
+              "path": ["challans"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "10" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Challan by ID",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{base_url}}/challans/1", "host": ["{{base_url}}"], "path": ["challans", "1"] }
+          }
+        }
+      ]
+    }
+  ]
+}
