@@ -12,8 +12,6 @@ export default function Challans() {
   const [selectedProducts, setSelectedProducts] = useState<{product_id: number, name: string, quantity: number, price: number}[]>([]);
   const [popup, setPopup] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
-  const user = JSON.parse(localStorage.getItem('user') || '{}');
-
   const fetchChallans = async () => {
     const res = await api.get('/challans');
     setChallans(res.data.challans);
@@ -33,11 +31,6 @@ export default function Challans() {
       return () => clearTimeout(timer);
     }
   }, [popup]);
-
-  const handleLogout = () => {
-    localStorage.clear();
-    navigate('/');
-  };
 
   const addProductLine = () => {
     setSelectedProducts([...selectedProducts, { product_id: 0, name: '', quantity: 1, price: 0 }]);
@@ -62,6 +55,7 @@ export default function Challans() {
       setPopup({ type: 'error', message: 'Select a customer and at least one product' });
       return;
     }
+    const user = JSON.parse(localStorage.getItem('user') || '{}');
     const totalQuantity = selectedProducts.reduce((sum, p) => sum + Number(p.quantity), 0);
     const challanNumber = `CH-${Date.now()}`;
 
@@ -78,20 +72,26 @@ export default function Challans() {
       setCustomerId('');
       setSelectedProducts([]);
       fetchChallans();
-      setPopup({ type: 'success', message: 'Challan created successfully!' });
+      setPopup({ type: 'success', message: 'Challan saved as Draft. Confirm it to deduct stock.' });
     } catch (err: any) {
       setPopup({ type: 'error', message: err.response?.data?.error || 'Error creating challan' });
     }
   };
 
-  const statusColor: Record<string, { bg: string; text: string }> = {
-    Draft: { bg: '#fef9c3', text: '#854d0e' },
-    Confirmed: { bg: '#f0fdf4', text: '#16a34a' },
-    Cancelled: { bg: '#fef2f2', text: '#dc2626' },
+  const handleConfirm = async (challanId: number) => {
+    const user = JSON.parse(localStorage.getItem('user') || '{}');
+    try {
+      await api.post(`/challans/${challanId}/confirm`, { confirmed_by: user.id });
+      fetchChallans();
+      fetchDropdownData(); // refresh product stock too
+      setPopup({ type: 'success', message: 'Challan confirmed! Stock updated and movement logged.' });
+    } catch (err: any) {
+      setPopup({ type: 'error', message: err.response?.data?.error || 'Error confirming challan' });
+    }
   };
 
   return (
-    <div style={{ minHeight: '100vh', background: '#f8fafc', fontFamily: 'Segoe UI, sans-serif', position: 'relative' }}>
+    <div style={{ padding: '30px', position: 'relative' }}>
 
       {popup && (
         <div style={{
@@ -100,100 +100,94 @@ export default function Challans() {
           border: `1px solid ${popup.type === 'error' ? '#fca5a5' : '#86efac'}`,
           borderLeft: `5px solid ${popup.type === 'error' ? '#dc2626' : '#16a34a'}`,
           borderRadius: '8px', padding: '16px 18px', boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
-          display: 'flex', alignItems: 'flex-start', gap: '12px',
+          display: 'flex', alignItems: 'flex-start', gap: '12px', animation: 'slideIn 0.25s ease-out',
         }}>
-          <div style={{ fontSize: '20px' }}>{popup.type === 'error' ? '⚠️' : '✅'}</div>
+          <div style={{ fontSize: '20px', lineHeight: 1 }}>{popup.type === 'error' ? '⚠️' : '✅'}</div>
           <div style={{ flex: 1 }}>
             <div style={{ fontWeight: 700, color: popup.type === 'error' ? '#991b1b' : '#166534', marginBottom: '4px' }}>
-              {popup.type === 'error' ? 'Error' : 'Success'}
+              {popup.type === 'error' ? 'Action Failed' : 'Success'}
             </div>
             <div style={{ fontSize: '14px', color: popup.type === 'error' ? '#7f1d1d' : '#14532d' }}>{popup.message}</div>
           </div>
-          <button onClick={() => setPopup(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '16px', color: '#666' }}>✕</button>
+          <button onClick={() => setPopup(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '16px', color: '#666', padding: 0 }}>✕</button>
         </div>
       )}
+      <style>{`@keyframes slideIn { from { transform: translateX(30px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }`}</style>
 
-      <div style={{ background: '#1e293b', color: 'white', padding: '16px 32px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '28px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <button onClick={() => navigate('/dashboard')} style={{ background: 'rgba(255,255,255,0.1)', color: 'white', border: 'none', padding: '8px 14px', borderRadius: '6px', cursor: 'pointer', fontSize: '14px' }}>
-            ← Dashboard
-          </button>
-          <div style={{ fontSize: '20px', fontWeight: 700 }}>Sales Challans</div>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <span style={{ fontSize: '14px', color: '#cbd5e1' }}>{user.name} <span style={{ color: '#64748b' }}>({user.role})</span></span>
-          <button onClick={handleLogout} style={{ background: '#dc2626', color: 'white', border: 'none', padding: '8px 14px', borderRadius: '6px', cursor: 'pointer', fontSize: '14px' }}>Logout</button>
-        </div>
+      <button onClick={() => navigate('/dashboard')} style={{ marginBottom: '16px' }}>← Back to Dashboard</button>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+        <h1>Sales Challans</h1>
+        <button onClick={() => setShowForm(!showForm)} style={{ padding: '10px 16px', background: '#2563eb', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
+          {showForm ? 'Cancel' : '+ New Challan'}
+        </button>
       </div>
 
-      <div style={{ padding: '0 32px 32px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-          <div style={{ background: 'white', padding: '10px 18px', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
-            <div style={{ fontSize: '12px', color: '#94a3b8' }}>Total Challans</div>
-            <div style={{ fontSize: '20px', fontWeight: 700, color: '#1e293b' }}>{challans.length}</div>
-          </div>
-          <button onClick={() => setShowForm(!showForm)} style={{ padding: '11px 20px', background: '#2563eb', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, fontSize: '14px' }}>
-            {showForm ? 'Cancel' : '+ New Challan'}
+      {showForm && (
+        <form onSubmit={handleSubmit} style={{ background: '#f4f6f8', padding: '20px', borderRadius: '8px', marginBottom: '20px' }}>
+          <select value={customerId} onChange={e => setCustomerId(e.target.value)} required style={{ padding: '8px', width: '100%', marginBottom: '12px' }}>
+            <option value="">Select Customer *</option>
+            {customers.map(c => <option key={c.id} value={c.id}>{c.name} ({c.mobile})</option>)}
+          </select>
+
+          {selectedProducts.map((line, i) => (
+            <div key={i} style={{ display: 'flex', gap: '10px', marginBottom: '8px' }}>
+              <select value={line.product_id} onChange={e => updateProductLine(i, Number(e.target.value))} style={{ padding: '8px', flex: 2 }}>
+                <option value="0">Select Product</option>
+                {products.map(p => <option key={p.id} value={p.id}>{p.name} (₹{p.unit_price}, stock: {p.current_stock})</option>)}
+              </select>
+              <input type="number" min="1" value={line.quantity} onChange={e => updateQuantity(i, Number(e.target.value))} style={{ padding: '8px', flex: 1 }} placeholder="Qty" />
+            </div>
+          ))}
+
+          <button type="button" onClick={addProductLine} style={{ padding: '8px 12px', marginBottom: '12px', cursor: 'pointer' }}>+ Add Product Line</button>
+          <br />
+          <button type="submit" style={{ padding: '10px 20px', background: '#16a34a', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
+            Save Challan (Draft)
           </button>
-        </div>
+        </form>
+      )}
 
-        {showForm && (
-          <form onSubmit={handleSubmit} style={{ background: 'white', padding: '24px', borderRadius: '12px', marginBottom: '24px', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
-            <select value={customerId} onChange={e => setCustomerId(e.target.value)} required style={{ padding: '10px', width: '100%', marginBottom: '14px', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '14px' }}>
-              <option value="">Select Customer *</option>
-              {customers.map(c => <option key={c.id} value={c.id}>{c.name} ({c.mobile})</option>)}
-            </select>
-
-            {selectedProducts.map((line, i) => (
-              <div key={i} style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
-                <select value={line.product_id} onChange={e => updateProductLine(i, Number(e.target.value))} style={{ padding: '10px', flex: 2, border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '14px' }}>
-                  <option value="0">Select Product</option>
-                  {products.map(p => <option key={p.id} value={p.id}>{p.name} (₹{p.unit_price})</option>)}
-                </select>
-                <input type="number" min="1" value={line.quantity} onChange={e => updateQuantity(i, Number(e.target.value))} style={{ padding: '10px', flex: 1, border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '14px' }} placeholder="Qty" />
-              </div>
-            ))}
-
-            <button type="button" onClick={addProductLine} style={{ padding: '9px 14px', marginBottom: '16px', cursor: 'pointer', border: '1px dashed #94a3b8', borderRadius: '6px', background: 'white', color: '#475569', fontSize: '13px' }}>
-              + Add Product Line
-            </button>
-            <br />
-            <button type="submit" style={{ padding: '12px 22px', background: '#16a34a', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 600 }}>
-              Save Challan (Draft)
-            </button>
-          </form>
-        )}
-
-        <div style={{ background: 'white', borderRadius: '12px', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr style={{ background: '#f1f5f9', textAlign: 'left' }}>
-                <th style={{ padding: '14px 16px', fontSize: '13px', color: '#64748b' }}>Challan #</th>
-                <th style={{ padding: '14px 16px', fontSize: '13px', color: '#64748b' }}>Customer ID</th>
-                <th style={{ padding: '14px 16px', fontSize: '13px', color: '#64748b' }}>Total Qty</th>
-                <th style={{ padding: '14px 16px', fontSize: '13px', color: '#64748b' }}>Status</th>
-                <th style={{ padding: '14px 16px', fontSize: '13px', color: '#64748b' }}>Date</th>
-              </tr>
-            </thead>
-            <tbody>
-              {challans.map((c) => {
-                const sc = statusColor[c.status] || statusColor.Draft;
-                return (
-                  <tr key={c.id} style={{ borderTop: '1px solid #f1f5f9' }}>
-                    <td style={{ padding: '14px 16px', fontWeight: 600, color: '#1e293b' }}>{c.challan_number}</td>
-                    <td style={{ padding: '14px 16px', color: '#64748b' }}>{c.customer_id}</td>
-                    <td style={{ padding: '14px 16px', color: '#64748b' }}>{c.total_quantity}</td>
-                    <td style={{ padding: '14px 16px' }}>
-                      <span style={{ background: sc.bg, color: sc.text, padding: '4px 10px', borderRadius: '20px', fontSize: '13px', fontWeight: 700 }}>{c.status}</span>
-                    </td>
-                    <td style={{ padding: '14px 16px', color: '#64748b' }}>{new Date(c.created_at).toLocaleDateString()}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <thead>
+          <tr style={{ background: '#f4f6f8', textAlign: 'left' }}>
+            <th style={{ padding: '10px' }}>Challan #</th>
+            <th style={{ padding: '10px' }}>Customer ID</th>
+            <th style={{ padding: '10px' }}>Total Qty</th>
+            <th style={{ padding: '10px' }}>Status</th>
+            <th style={{ padding: '10px' }}>Date</th>
+            <th style={{ padding: '10px' }}>Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {challans.map((c) => (
+            <tr key={c.id} style={{ borderBottom: '1px solid #eee' }}>
+              <td style={{ padding: '10px' }}>{c.challan_number}</td>
+              <td style={{ padding: '10px' }}>{c.customer_id}</td>
+              <td style={{ padding: '10px' }}>{c.total_quantity}</td>
+              <td style={{ padding: '10px' }}>
+                <span style={{
+                  background: c.status === 'Confirmed' ? '#dcfce7' : '#fef3c7',
+                  color: c.status === 'Confirmed' ? '#166534' : '#92400e',
+                  padding: '4px 10px', borderRadius: '20px', fontSize: '13px', fontWeight: 700,
+                }}>
+                  {c.status}
+                </span>
+              </td>
+              <td style={{ padding: '10px' }}>{new Date(c.created_at).toLocaleDateString()}</td>
+              <td style={{ padding: '10px' }}>
+                {c.status !== 'Confirmed' && (
+                  <button
+                    onClick={() => handleConfirm(c.id)}
+                    style={{ padding: '6px 12px', background: '#2563eb', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '13px' }}
+                  >
+                    Confirm
+                  </button>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
