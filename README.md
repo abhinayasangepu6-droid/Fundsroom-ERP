@@ -4,6 +4,19 @@ A basic ERP + CRM portal built for the Fundsroom Full Stack Developer take-home 
 
 ---
 
+## Live Demo
+
+| Service | Platform | URL |
+|---|---|---|
+| Frontend | Vercel | [https://fundsroom-erp-alpha.vercel.app](https://fundsroom-erp-alpha.vercel.app) |
+| Backend API | Render | [https://fundsroom-erp-ttnj.onrender.com](https://fundsroom-erp-ttnj.onrender.com) |
+
+> **Note:** The backend is hosted on Render's free tier, which spins down after inactivity. The first request after idle time may take 30-60 seconds to respond while the server wakes up — this is expected, not a bug.
+
+Use the test credentials below to log in and explore all 4 modules.
+
+---
+
 ## Tech Stack
 
 - **Backend:** Node.js, TypeScript, Express, PostgreSQL (hosted on [Neon](https://neon.tech))
@@ -84,12 +97,13 @@ Frontend runs on `http://localhost:5173`.
 
 ## Database Schema (summary)
 
-Four tables: `users`, `customers`, `products`, `challans`.
+Five tables: `users`, `customers`, `products`, `challans`, `stock_movements`.
 
 - **users** — id, name, email, password (hashed), role (Admin / Sales / Warehouse / Accounts)
 - **customers** — id, name, mobile, and other CRM fields
 - **products** — id, name, sku, category, unit_price, current_stock, min_stock_alert, location
-- **challans** — id, challan_number, customer_id, products (JSON array of `{product_id, quantity, price}`), total_quantity, status, created_by, created_at
+- **challans** — id, challan_number, customer_id, products (JSONB array of `{product_id, quantity}`), total_quantity, status (Draft/Confirmed), created_by, created_at
+- **stock_movements** — id, product_id, quantity, movement_type (IN/OUT), reason, created_by, created_at — an audit log of every stock change, written whenever a challan is confirmed
 
 ---
 
@@ -120,22 +134,24 @@ Four tables: `users`, `customers`, `products`, `challans`.
 - `POST /products` — create
 - `GET /products` — list (supports search & pagination)
 - `PUT /products/:id` — update
+- `GET /products/:id/movements` — audit trail of stock changes for a product
 
 **Challans**
-- `POST /challans` — create a challan. Validates stock availability for every line item inside a database transaction; if any product has insufficient stock, the entire request is rejected and rolled back (no partial updates, no negative stock). On success, `current_stock` is deducted for each product.
+- `POST /challans` — create a challan as a **Draft**. Does not touch stock yet.
+- `POST /challans/:id/confirm` — confirms a Draft challan. Validates stock availability for every line item inside a database transaction (with row-level locking via `SELECT ... FOR UPDATE`); if any product has insufficient stock, the entire request is rejected and rolled back (no partial updates, no negative stock). On success, deducts `current_stock` for each product, logs each deduction to `stock_movements`, and marks the challan `Confirmed`.
 - `GET /challans` — list (paginated)
 - `GET /challans/:id` — get one
 
-A Postman collection is included alongside this README for testing all endpoints directly.
+A Postman collection (`Fundsroom-ERP.postman_collection.json`) is included in the repository root for testing all endpoints directly.
 
 ---
 
 ## Assumptions Made
 
 - All 4 roles can currently access all modules — the API does not yet enforce per-role permissions on top of authentication (see Known Limitations).
-- Challans are created directly with a `products` array of `{product_id, quantity}` supplied by the frontend; product price/name are looked up server-side at creation time rather than being trusted from the client where relevant.
-- A challan's `status` defaults to `Draft` since a full Draft → Confirm workflow was out of scope for this submission.
-- Given the assignment's time constraint, **Option B** was chosen: build all 4 modules to a working, tested, basic-CRUD standard rather than building one module in full depth. This was a deliberate scope decision, not an oversight.
+- Challans are created directly with a `products` array of `{product_id, quantity}` supplied by the frontend; product price/name are looked up server-side rather than being trusted from the client.
+- A challan's `status` starts as `Draft` and only moves to `Confirmed` (with stock deducted) via the separate confirm endpoint — matching the assignment's required Draft → Confirmed business flow.
+- Given the assignment's time constraint, **Option B** was chosen initially: build all 4 modules to a working, tested, basic-CRUD standard rather than building one module in full depth. The Draft → Confirm workflow and stock movement log were added as a follow-up iteration once core CRUD and deployment were stable.
 
 ---
 
@@ -148,12 +164,24 @@ This submission was built under a tight time constraint. In the interest of tran
 - **No automated tests** (unit or integration) are included.
 - **Frontend UI is functional but visually basic** — the priority was working, correct business logic over visual polish, given the time available.
 
-**What is fully implemented and tested:** JWT authentication for all 4 roles, full CRUD for Customers and Products, a complete **Draft → Confirm Sales Challan workflow** where stock is only deducted on confirmation, a **stock movement audit log** recorded transactionally alongside every deduction, protected frontend routes, product snapshotting inside challans (name/price captured at creation time), and transactional stock validation that checks every line item before committing, rejects the whole request with a clear error if any item has insufficient stock, and never leaves stock partially updated.
+**What is fully implemented and tested:** JWT authentication for all 4 roles, full CRUD for Customers and Products, a complete **Draft → Confirm Sales Challan workflow** where stock is only deducted on confirmation, a **stock movement audit log** recorded transactionally alongside every deduction, protected frontend routes, product snapshotting inside challans, and transactional stock validation that checks every line item before committing, rejects the whole request with a clear error if any item has insufficient stock, and never leaves stock partially updated.
+
+---
+
+## Architecture Overview
+
+The system follows a standard 3-tier architecture: a React (Vite + TypeScript) frontend communicates via REST APIs (axios) with a Node.js/Express/TypeScript backend, which connects to a PostgreSQL database (hosted on Neon). Authentication uses JWT tokens issued on login and verified on protected routes, with the frontend guarding routes client-side. The backend is organized by module (Auth, Customers, Products, Challans), each with its own controller and route file, using raw parameterized SQL queries.
+
+The centerpiece of the business logic is in the Challans module: creating a challan runs as a Draft with no stock impact. Confirming it runs inside a single PostgreSQL transaction that checks stock availability for every line item with row-level locking, rejects and rolls back the entire request if any item has insufficient stock, and only then deducts stock, logs the movement, and marks the challan Confirmed — guaranteeing no partial updates and no negative stock under any circumstance.
 
 ---
 
 ## Deployment
 
-This submission is provided as a **local setup + screen recording** (an explicitly allowed alternative per the assignment instructions), rather than a hosted deployment, due to time constraints. The recording demonstrates the full flow: login, all 4 modules, stock deduction on challan creation, the insufficient-stock rejection case, and protected routes.
+The project is deployed and live (see **Live Demo** section above):
 
-To deploy in future: backend to Render/Railway (set the same env vars as above), frontend to Vercel/Netlify (set `VITE_API_URL` pointing to the deployed backend, and update `frontend/src/services/api.ts` to use it instead of `localhost:5000`).
+- **Backend** — deployed on [Render](https://render.com), Node/Express web service, root directory `backend`, environment variables (`DATABASE_URL`, `JWT_SECRET`, `PORT`) configured in the Render dashboard rather than committed to the repo.
+- **Frontend** — deployed on [Vercel](https://vercel.com), root directory `frontend`, Vite build, configured to call the Render backend URL instead of `localhost:5000`.
+- **Database** — Neon PostgreSQL (cloud-hosted, same instance used in local development).
+
+Both deployments auto-redeploy on every push to the `main` branch of this repository.
