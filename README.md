@@ -143,13 +143,12 @@ A Postman collection is included alongside this README for testing all endpoints
 
 This submission was built under a tight time constraint. In the interest of transparency:
 
-- **Role-based access control is not fully implemented.** All 4 roles can log in and reach all modules; the backend does not yet restrict actions by role (e.g., a Sales user could technically perform an action intended for Admin only). Given more time, this would be handled with role-checking middleware on each route.
-- **Draft → Confirm workflow for challans is simplified.** Challans are created directly; there is no separate "confirm" step that would, for example, lock the challan from further edits.
+- **Role-based access control is not enforced on the backend.** All 4 roles can log in and reach all modules; there is no middleware yet restricting actions by role (e.g., a Sales user could technically perform an action intended for Admin only).
+- **A few optional customer fields are not implemented:** GST number, follow-up date, and a dedicated customer detail/profile page were deprioritized in favor of core CRUD.
 - **No automated tests** (unit or integration) are included.
 - **Frontend UI is functional but visually basic** — the priority was working, correct business logic over visual polish, given the time available.
-- **Product snapshotting in challans is partial.** Product name/price are captured at challan-creation time, but there is no versioning if a product is later renamed or repriced.
 
-What **is** fully implemented and tested despite the time constraint: JWT auth, all 4 modules' CRUD operations, protected frontend routes, and — most importantly — real stock-deduction logic with negative-stock prevention, wrapped in a database transaction so a failed challan never partially updates stock.
+**What is fully implemented and tested:** JWT authentication for all 4 roles, full CRUD for Customers and Products, a complete **Draft → Confirm Sales Challan workflow** where stock is only deducted on confirmation, a **stock movement audit log** recorded transactionally alongside every deduction, protected frontend routes, product snapshotting inside challans (name/price captured at creation time), and transactional stock validation that checks every line item before committing, rejects the whole request with a clear error if any item has insufficient stock, and never leaves stock partially updated.
 
 ---
 
